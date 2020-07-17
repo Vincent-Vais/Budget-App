@@ -5,13 +5,26 @@ let budgetController = (function(){
         this.id = id;
         this.description = description;
         this.value = value;
+        this.pctg = -1;
+    };
+
+    Expense.prototype.calcPctg = function(totalInc){
+        if(totalInc > 0){
+            this.pctg = Math.round(this.value / totalInc * 100);
+        }else{
+            this.pctg = -1;
+        }
+    }
+
+    Expense.prototype.getPctg = function(){
+        return this.pctg;
     }
 
     const Income = function(id, description, value){
         this.id = id;
         this.description = description;
         this.value = value;
-    }
+    };
 
     const data = {
         allItems: {
@@ -24,7 +37,7 @@ let budgetController = (function(){
         },
         budget: 0,
         pctg : -1
-    }
+    };
 
     const calculateTotal = function(type){
         let sum;
@@ -34,7 +47,7 @@ let budgetController = (function(){
             sum += item.value ;
         });
         data.totals[type] = sum;
-    }
+    };
 
     return {
         addItem: function(type, des, val){
@@ -75,6 +88,15 @@ let budgetController = (function(){
                 data.pctg = Math.round(data.totals.exp / data.totals.inc * 100);
             }
         },
+        calculatePctgs: function(){
+            let totalIncome;
+
+            totalIncome = data.totals.inc;
+            console.log(totalIncome);
+            data.allItems.exp.forEach(item => {
+                item.calcPctg(totalIncome);
+            });
+        },
         getBudget: function(){
             return {
                 budget: data.budget,
@@ -82,6 +104,14 @@ let budgetController = (function(){
                 totalExp: data.totals.exp,
                 pctg: data.pctg
             }
+        },
+        getPctgs: function(){
+            let allPctgs;
+
+            allPctgs = data.allItems.exp.map(item => {
+                return item.getPctg();
+            });
+            return allPctgs;
         }
     }
 
@@ -101,8 +131,36 @@ let UIController = (function(){
         incomeLabel: ".budget__income--value",
         expensesLabel: ".budget__expenses--value",
         pctgLabel: ".budget__expenses--percentage",
-        container: ".container"
-    }
+        container: ".container",
+        expensesPctgLabel: ".item__percentage",
+        dateLabel: ".budget__title--month"
+    };
+
+    const formatNumber = function(num, type){
+        let numSplit, intPart, decPart, beforeComa, numOfComas, secondPart, i;
+        num = Math.abs(num);
+        num = num.toFixed(2); // becomes a string here
+        numSplit = num.split(".");
+        intPart = numSplit[0];
+        beforeComa = intPart.length % 3;
+        numOfComas = Math.floor(intPart.length / 3);
+        secondPart = "" ;
+        i = 0;
+        while(numOfComas > 0){
+            secondPart +=  ',' + intPart.substring(beforeComa + i, beforeComa + i + 3);
+            i += 3;
+            numOfComas--;
+        }
+        intPart = intPart.substring(0, beforeComa) + secondPart;
+        decPart = numSplit[1];
+        return (type === "exp" ? '-' : "+") + ' ' + intPart.replace(/(^,)/g, "") + "." + decPart ;
+    };
+
+    const nodeListForEach = function(list, callback){
+        for(let i = 0; i < list.length; i++){
+            callback(list[i], i);
+        }
+    };
 
     return {
         getInput: function(){
@@ -122,7 +180,7 @@ let UIController = (function(){
                 html = `<div class="item clearfix" id="inc-${obj.id}">
                             <div class="item__description">${obj.description}</div>
                             <div class="right clearfix">
-                                <div class="item__value">+ ${obj.value}</div>
+                                <div class="item__value">${formatNumber(obj.value, type)}</div>
                                 <div class="item__delete">
                                     <button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button>
                                 </div>
@@ -133,7 +191,7 @@ let UIController = (function(){
                 html = `<div class="item clearfix" id="exp-${obj.id}">
                             <div class="item__description">${obj.description}</div>
                             <div class="right clearfix">
-                                <div class="item__value">- ${obj.value}</div>
+                                <div class="item__value">${formatNumber(obj.value, type)}</div>
                                 <div class="item__percentage">21%</div>
                                 <div class="item__delete">
                                     <button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button>
@@ -162,14 +220,33 @@ let UIController = (function(){
             fieldsArray[0].focus();
         },
         displayBudget: function(obj){
-            document.querySelector(DOMstrings.budgetLabel).textContent = obj.budget;
-            document.querySelector(DOMstrings.incomeLabel).textContent = obj.totalInc;
-            document.querySelector(DOMstrings.expensesLabel).textContent = obj.totalExp;
+            let type = obj.budget < 0 ? "exp" : "inc";
+            document.querySelector(DOMstrings.budgetLabel).textContent = formatNumber(obj.budget, type);
+            document.querySelector(DOMstrings.incomeLabel).textContent = formatNumber(obj.totalInc, "inc");
+            document.querySelector(DOMstrings.expensesLabel).textContent = formatNumber(obj.totalExp, "exp");
             if(obj.pctg > 0){
                 document.querySelector(DOMstrings.pctgLabel).textContent = `${obj.pctg}%`;
             }else{
                 document.querySelector(DOMstrings.pctgLabel).textContent = "---";
             }
+        },
+        displayPctgs: function(pctgs){
+            let fields;
+
+            fields = document.querySelectorAll(DOMstrings.expensesPctgLabel);
+
+            nodeListForEach(fields, (field, index) => {
+                field.textContent = pctgs[index] > 0 ? `${pctgs[index]}%` : '---';
+            });
+        },
+        displayMonth: function(){
+            let now, year, month, months;
+
+            now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+            months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            document.querySelector(DOMstrings.dateLabel).textContent = `${months[month]} ${year}`;
         },
         getParent: function(target){
             let currentNode;
@@ -185,6 +262,16 @@ let UIController = (function(){
             }
             return currentNode
            
+        },
+        changedType: function(){
+            let fields = document.querySelectorAll([
+                DOMstrings.inputType, DOMstrings.inputDescription, DOMstrings.inputValue
+            ]);
+            nodeListForEach(fields, (field)=>{
+                field.classList.toggle("red-focus");
+            });
+
+            document.querySelector(DOMstrings.inputBtn).classList.toggle("red");
         }
     }
 })();
@@ -203,6 +290,8 @@ let controller = (function(budgetCtrl, UICtrl){
         });
 
         document.querySelector(DOM.container).addEventListener("click", ctrlDeleteItem);
+
+        document.querySelector(DOM.inputType).addEventListener("change", UICtrl.changedType);
     }
 
     const updateBudget = function(){
@@ -210,10 +299,20 @@ let controller = (function(budgetCtrl, UICtrl){
 
         // 1. Calculate the budget
         budgetCtrl.calculateBudget();
-        // 2. Return the budget
+        // 2. Return the budget from bdgtController
         budget = budgetCtrl.getBudget();
         // 3. Display the budget
         UICtrl.displayBudget(budget);
+    };
+
+    const updatePctgs = function(){
+        let allPctgs;
+        // 1. Calculate percentages
+        budgetCtrl.calculatePctgs();
+        // 2. Return the percentages from bdgtController
+        allPctgs = budgetCtrl.getPctgs();
+        // 3. Display the percantages
+        UICtrl.displayPctgs(allPctgs);
     }
 
     const ctrlAddItem = function(){
@@ -230,6 +329,8 @@ let controller = (function(budgetCtrl, UICtrl){
             UICtrl.clearFields();
             // 5. Calculate and update the budget
             updateBudget();
+            //6. Calculate and update the pctgs
+            updatePctgs();
         }
     };
 
@@ -248,6 +349,8 @@ let controller = (function(budgetCtrl, UICtrl){
             UICtrl.deleteListItem(itemID);
             // 5. Update and show the budget
             updateBudget();
+            //6. Calculate and update the pctgs
+            updatePctgs();
         }
     };
 
@@ -261,6 +364,7 @@ let controller = (function(budgetCtrl, UICtrl){
                 pctg: -1
             });
             setupEventListeners();
+            UIController.displayMonth();
         }
     }
 
